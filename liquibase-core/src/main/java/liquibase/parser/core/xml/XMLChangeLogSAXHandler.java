@@ -14,21 +14,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import liquibase.Contexts;
+import liquibase.change.AddColumnConfig;
 import liquibase.change.Change;
 import liquibase.change.ChangeFactory;
 import liquibase.change.ChangeWithColumns;
 import liquibase.change.ColumnConfig;
 import liquibase.change.ConstraintsConfig;
-import liquibase.change.core.AbstractModifyDataChange;
-import liquibase.change.core.CreateProcedureChange;
-import liquibase.change.core.CreateViewChange;
-import liquibase.change.core.ExecuteShellCommandChange;
-import liquibase.change.core.InsertDataChange;
-import liquibase.change.core.LoadDataChange;
-import liquibase.change.core.LoadDataColumnConfig;
-import liquibase.change.core.RawSQLChange;
-import liquibase.change.core.StopChange;
-import liquibase.change.core.UpdateDataChange;
+import liquibase.change.core.*;
 import liquibase.change.custom.CustomChangeWrapper;
 import liquibase.changelog.ChangeLogParameters;
 import liquibase.changelog.ChangeSet;
@@ -174,6 +166,7 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 
 				Enumeration<URL> resourcesEnum = resourceAccessor.getResources(pathName);
                 SortedSet<URL> resources = new TreeSet<URL>(new Comparator<URL>() {
+                    @Override
                     public int compare(URL o1, URL o2) {
                         return o1.toString().compareTo(o2.toString());
                     }
@@ -310,12 +303,7 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 			} else if (rootPrecondition != null) {
 				currentPrecondition = PreconditionFactory.getInstance().create(localName);
 
-				for (int i = 0; i < atts.getLength(); i++) {
-					String attributeName = atts.getLocalName(i);
-					String attributeValue = atts.getValue(i);
-					setProperty(currentPrecondition, attributeName,
-							attributeValue);
-				}
+				setAllProperties(currentPrecondition, atts);
 				preconditionLogicStack.peek().addNestedPrecondition(
 						currentPrecondition);
 
@@ -341,12 +329,9 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 							.getValue("applyToRollback"));
 				}
 			} else if (inModifySql) {
-				SqlVisitor sqlVisitor = SqlVisitorFactory.getInstance().create(localName);
-				for (int i = 0; i < atts.getLength(); i++) {
-					String attributeName = atts.getLocalName(i);
-					String attributeValue = atts.getValue(i);
-					setProperty(sqlVisitor, attributeName, attributeValue);
-				}
+                SqlVisitor sqlVisitor = SqlVisitorFactory.getInstance().create(localName);
+
+				setAllProperties(sqlVisitor, atts);
 				sqlVisitor.setApplicableDbms(modifySqlDbmsList);
 				sqlVisitor.setApplyToRollback(modifySqlAppliedOnRollback);
 				sqlVisitor.setContexts(modifySqlContexts);
@@ -370,50 +355,50 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 					((CustomChangeWrapper) change)
 							.setClassLoader(resourceAccessor.toClassLoader());
 				}
-				for (int i = 0; i < atts.getLength(); i++) {
-					String attributeName = atts.getLocalName(i);
-					String attributeValue = atts.getValue(i);
-					setProperty(change, attributeName, attributeValue);
-				}
 
+				setAllProperties(change, atts);
 				change.finishInitialization();
 			} else if (change != null && "column".equals(qName)) {
 				ColumnConfig column;
 				if (change instanceof LoadDataChange) {
 					column = new LoadDataColumnConfig();
+                } else if (change instanceof AddColumnChange || change instanceof CreateIndexChange) {
+                        column = new AddColumnConfig();
+                } else if (change instanceof CreateIndexChange) {
+                    column = new AddColumnConfig();
 				} else {
 					column = new ColumnConfig();
 				}
                 populateColumnFromAttributes(atts, column);
-                if (change instanceof ChangeWithColumns) {
-					((ChangeWithColumns) change).addColumn(column);
-				} else {
-					throw new RuntimeException("Unexpected column tag for "
-							+ change.getClass().getName());
-				}
+					if (change instanceof ChangeWithColumns) {
+						((ChangeWithColumns) change).addColumn(column);
+					} else {
+						throw new RuntimeException("Unexpected column tag for "
+								+ change.getClass().getName());
+					}
 			} else if (change != null && "whereParams".equals(qName)) {
                 if (!(change instanceof AbstractModifyDataChange)) {
                     throw new RuntimeException("Unexpected change: "
                             + change.getClass().getName());
-                }
+				}
             } else if (change != null && change instanceof AbstractModifyDataChange && "param".equals(qName)) {
                 ColumnConfig param = new ColumnConfig();
                 populateColumnFromAttributes(atts, param);
                 ((AbstractModifyDataChange) change).addWhereParam(param);
-            }
+                }
             else if (change != null && "constraints".equals(qName)) {
 				ConstraintsConfig constraints = new ConstraintsConfig();
 				for (int i = 0; i < atts.getLength(); i++) {
 					String attributeName = atts.getLocalName(i);
 					String attributeValue = atts.getValue(i);
 					setProperty(constraints, attributeName, attributeValue);
-				}
+                }
 				ColumnConfig lastColumn = null;
                 if (change instanceof ChangeWithColumns) {
                     List<ColumnConfig> columns = ((ChangeWithColumns) change).getColumns();
                     if (columns != null && columns.size() > 0) {
                         lastColumn = columns.get(columns.size() - 1);
-                    }
+                }
                 } else {
 					throw new RuntimeException("Unexpected change: "
 							+ change.getClass().getName());
@@ -477,13 +462,9 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 									+ " for tag: " + localName);
 				}
 				Object subObject = method.invoke(objectToCreateFrom);
-				for (int i = 0; i < atts.getLength(); i++) {
-					String attributeName = atts.getLocalName(i);
-					String attributeValue = atts.getValue(i);
-					setProperty(subObject, attributeName, attributeValue);
-				}
-				changeSubObjects.push(subObject);
+				setAllProperties(subObject, atts);
 
+				changeSubObjects.push(subObject);
 			} else {
 				throw new MigrationFailedException(changeSet,
 						"Unexpected tag: " + localName);
@@ -493,6 +474,28 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 			e.printStackTrace();
 			throw new SAXException(e);
 		}
+	}
+
+	private void setAllProperties(Object object, Attributes atts) throws IllegalAccessException, InvocationTargetException, CustomChangeException {
+		for (int i = 0; i < atts.getLength(); i++) {
+			String attributeName = atts.getQName(i);
+			String attributeValue = atts.getValue(i);
+			setProperty(object, attributeName, attributeValue);
+		}
+	}
+
+	private <T extends ColumnConfig> T getLastColumnConfigFromChange() {
+		T result = null;
+		if (change instanceof ChangeWithColumns) {
+		    List<T> columns = ((ChangeWithColumns) change).getColumns();
+		    if (columns.size() > 0) {
+		        result = columns.get(columns.size() - 1);
+		    }
+		} else {
+			throw new RuntimeException("Unexpected change: "
+					+ change.getClass().getName());
+		}
+		return result;
 	}
 
     private void populateColumnFromAttributes(Attributes atts, ColumnConfig column) throws IllegalAccessException, InvocationTargetException, CustomChangeException {
@@ -725,52 +728,64 @@ class XMLChangeLogSAXHandler extends DefaultHandler {
 			this.attributes = attributes;
 		}
 
-		public int getLength() {
+		@Override
+        public int getLength() {
 			return attributes.getLength();
 		}
 
-		public String getURI(int index) {
+		@Override
+        public String getURI(int index) {
 			return attributes.getURI(index);
 		}
 
-		public String getLocalName(int index) {
+		@Override
+        public String getLocalName(int index) {
 			return attributes.getLocalName(index);
 		}
 
-		public String getQName(int index) {
+		@Override
+        public String getQName(int index) {
 			return attributes.getQName(index);
 		}
 
-		public String getType(int index) {
+		@Override
+        public String getType(int index) {
 			return attributes.getType(index);
 		}
 
-		public String getValue(int index) {
+		@Override
+        public String getValue(int index) {
 			return attributes.getValue(index);
 		}
 
-		public int getIndex(String uri, String localName) {
+		@Override
+        public int getIndex(String uri, String localName) {
 			return attributes.getIndex(uri, localName);
 		}
 
-		public int getIndex(String qName) {
+		@Override
+        public int getIndex(String qName) {
 			return attributes.getIndex(qName);
 		}
 
-		public String getType(String uri, String localName) {
+		@Override
+        public String getType(String uri, String localName) {
 			return attributes.getType(uri, localName);
 		}
 
-		public String getType(String qName) {
+		@Override
+        public String getType(String qName) {
 			return attributes.getType(qName);
 		}
 
-		public String getValue(String uri, String localName) {
+		@Override
+        public String getValue(String uri, String localName) {
 			return changeLogParameters.expandExpressions(attributes.getValue(
 					uri, localName));
 		}
 
-		public String getValue(String qName) {
+		@Override
+        public String getValue(String qName) {
 			return changeLogParameters.expandExpressions(attributes
 					.getValue(qName));
 		}
