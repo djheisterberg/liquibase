@@ -15,6 +15,14 @@ import liquibase.structure.core.Table;
 public class ModifyDataTypeGenerator extends AbstractSqlGenerator<ModifyDataTypeStatement> {
 
     @Override
+    public boolean supports(ModifyDataTypeStatement statement, Database database) {
+        if (database instanceof SQLiteDatabase) {
+            return false;
+        }
+        return super.supports(statement, database);
+    }
+
+    @Override
     public Warnings warn(ModifyDataTypeStatement modifyDataTypeStatement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         Warnings warnings = super.warn(modifyDataTypeStatement, database, sqlGeneratorChain);
 
@@ -25,6 +33,7 @@ public class ModifyDataTypeGenerator extends AbstractSqlGenerator<ModifyDataType
         return warnings;
     }
 
+    @Override
     public ValidationErrors validate(ModifyDataTypeStatement statement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         ValidationErrors validationErrors = new ValidationErrors();
         validationErrors.checkRequiredField("tableName", statement.getTableName());
@@ -34,6 +43,7 @@ public class ModifyDataTypeGenerator extends AbstractSqlGenerator<ModifyDataType
         return validationErrors;
     }
 
+    @Override
     public Sql[] generateSql(ModifyDataTypeStatement statement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         String alterTable = "ALTER TABLE " + database.escapeTableName(statement.getCatalogName(), statement.getSchemaName(), statement.getTableName());
 

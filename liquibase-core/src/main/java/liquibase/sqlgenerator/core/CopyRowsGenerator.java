@@ -19,6 +19,7 @@ public class CopyRowsGenerator extends AbstractSqlGenerator<CopyRowsStatement> {
         return (database instanceof SQLiteDatabase);
     }
 
+    @Override
     public ValidationErrors validate(CopyRowsStatement copyRowsStatement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         ValidationErrors validationErrors = new ValidationErrors();
         validationErrors.checkRequiredField("targetTable", copyRowsStatement.getTargetTable());
@@ -27,10 +28,21 @@ public class CopyRowsGenerator extends AbstractSqlGenerator<CopyRowsStatement> {
         return validationErrors;
     }
 
+    @Override
     public Sql[] generateSql(CopyRowsStatement statement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         StringBuffer sql = new StringBuffer();
         if (database instanceof SQLiteDatabase) {
-            sql.append("INSERT INTO `").append(statement.getTargetTable()).append("` SELECT ");
+            sql.append("INSERT INTO `").append(statement.getTargetTable()).append("` (");
+
+            for (int i = 0; i < statement.getCopyColumns().size(); i++) {
+                ColumnConfig column = statement.getCopyColumns().get(i);
+                if (i > 0) {
+                    sql.append(",");
+                }
+                sql.append("`").append(column.getName()).append("`");
+            }
+
+            sql.append(") SELECT ");
             for (int i = 0; i < statement.getCopyColumns().size(); i++) {
                 ColumnConfig column = statement.getCopyColumns().get(i);
                 if (i > 0) {

@@ -296,6 +296,15 @@
 		<xsd:attribute name="startWith" type="xsd:long" />
 		<xsd:attribute name="incrementBy" type="xsd:long" />
 		<xsd:attribute name="remarks" type="xsd:string" />
+        <xsd:attribute name="encoding" type="xsd:string">
+            <xsd:annotation>
+                <xsd:appinfo>
+                    <xsd:documentation>
+                        Used with valueClobFile to specify file encoding explicitly.
+                    </xsd:documentation>
+                </xsd:appinfo>
+            </xsd:annotation>
+        </xsd:attribute>
 	</xsd:attributeGroup>
 
     <xsd:complexType name="columnType" mixed="true">
@@ -649,7 +658,24 @@
 		</xsd:complexType>
 	</xsd:element>
 
-	<xsd:element name="changeLogPropertyDefined">
+    <xsd:element name="rowCount">
+        <xsd:complexType>
+            <xsd:attribute name="catalogName" type="xsd:string" />
+            <xsd:attribute name="schemaName" type="xsd:string" />
+            <xsd:attribute name="tableName" type="xsd:string" />
+            <xsd:attribute name="expectedRows" type="xsd:int" />
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="tableIsEmpty">
+        <xsd:complexType>
+            <xsd:attribute name="catalogName" type="xsd:string" />
+            <xsd:attribute name="schemaName" type="xsd:string" />
+            <xsd:attribute name="tableName" type="xsd:string" />
+        </xsd:complexType>
+    </xsd:element>
+
+    <xsd:element name="changeLogPropertyDefined">
 		<xsd:complexType>
 			<xsd:attribute name="property" type="xsd:string" use="required" />
 			<xsd:attribute name="value" type="xsd:string" />
@@ -1143,6 +1169,8 @@
 				<xsd:element ref="indexExists" maxOccurs="unbounded" />
 				<xsd:element ref="primaryKeyExists" maxOccurs="unbounded" />
 				<xsd:element ref="viewExists" maxOccurs="unbounded" />
+                <xsd:element ref="tableIsEmpty" maxOccurs="unbounded" />
+                <xsd:element ref="rowCount" maxOccurs="unbounded" />
 				<xsd:element ref="sqlCheck" maxOccurs="unbounded" />
 				<xsd:element ref="changeLogPropertyDefined" maxOccurs="unbounded" />
                 <xsd:element ref="expectedQuotingStrategy" maxOccurs="unbounded" />

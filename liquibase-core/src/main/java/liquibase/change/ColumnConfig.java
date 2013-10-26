@@ -1,12 +1,5 @@
 package liquibase.change;
 
-import liquibase.statement.DatabaseFunction;
-import liquibase.statement.SequenceCurrentValueFunction;
-import liquibase.statement.SequenceNextValueFunction;
-import liquibase.structure.core.Column;
-import liquibase.structure.core.Table;
-import liquibase.util.ISODateFormat;
-
 import java.math.BigInteger;
 import java.text.NumberFormat;
 import java.text.ParseException;
@@ -17,8 +10,14 @@ import java.util.Set;
 
 import liquibase.serializer.LiquibaseSerializable;
 import liquibase.serializer.ReflectionSerializer;
-import liquibase.structure.core.*;
 import liquibase.statement.DatabaseFunction;
+import liquibase.statement.SequenceCurrentValueFunction;
+import liquibase.statement.SequenceNextValueFunction;
+import liquibase.structure.core.Column;
+import liquibase.structure.core.ForeignKey;
+import liquibase.structure.core.PrimaryKey;
+import liquibase.structure.core.Table;
+import liquibase.structure.core.UniqueConstraint;
 import liquibase.util.ISODateFormat;
 import liquibase.util.StringUtils;
 
@@ -36,6 +35,7 @@ public class ColumnConfig implements LiquibaseSerializable {
     private Boolean valueBoolean;
     private String valueBlobFile;
     private String valueClobFile;
+    private String encoding;
     private DatabaseFunction valueComputed;
     private SequenceNextValueFunction valueSequenceNext;
     private SequenceCurrentValueFunction valueSequenceCurrent;
@@ -52,7 +52,6 @@ public class ColumnConfig implements LiquibaseSerializable {
     private BigInteger startWith;
     private BigInteger incrementBy;
     private String remarks;
-
 
     /**
      * Create a ColumnConfig object based on a {@link Column} snapshot.
@@ -348,6 +347,18 @@ public class ColumnConfig implements LiquibaseSerializable {
     }
 
     /**
+     * Return encoding of a file, referenced via {@link #valueClobFile}.
+     */
+    public String getEncoding() {
+        return encoding;
+    }
+    
+    public ColumnConfig setEncoding(String encoding) {
+        this.encoding = encoding;
+        return this;
+    }
+    
+    /**
      * Return the value from whatever setValue* function was called. Will return null if none were set.
      */
     public Object getValueObject() {
@@ -622,14 +633,17 @@ public class ColumnConfig implements LiquibaseSerializable {
         return this;
     }
 
+    @Override
     public String getSerializedObjectName() {
         return "column";
     }
 
+    @Override
     public Set<String> getSerializableFields() {
         return ReflectionSerializer.getInstance().getFields(this);
     }
 
+    @Override
     public Object getSerializableFieldValue(String field) {
         return ReflectionSerializer.getInstance().getValue(this, field);
     }
@@ -644,6 +658,7 @@ public class ColumnConfig implements LiquibaseSerializable {
         return this;
     }
     
+    @Override
     public SerializationType getSerializableFieldType(String field) {
         return SerializationType.NAMED_FIELD;
     }

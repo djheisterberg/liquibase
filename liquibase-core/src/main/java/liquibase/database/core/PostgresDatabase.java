@@ -11,6 +11,7 @@ import liquibase.executor.ExecutorService;
 import liquibase.logging.LogFactory;
 import liquibase.statement.core.RawSqlStatement;
 import liquibase.structure.core.Table;
+import liquibase.util.StringUtils;
 
 import java.math.BigInteger;
 import java.sql.Types;
@@ -39,16 +40,6 @@ public class PostgresDatabase extends AbstractJdbcDatabase {
     }
 
     @Override
-    public void setConnection(DatabaseConnection conn) {
-        try {
-            reservedWords.addAll(Arrays.asList(((JdbcConnection) conn).getMetaData().getSQLKeywords().toUpperCase().split(",\\s*")));
-        } catch (Exception e) {
-            LogFactory.getLogger().warning("Cannot retrieve reserved words", e);
-        }
-
-        super.setConnection(conn);
-    }
-
     public String getShortName() {
         return "postgresql";
     }
@@ -58,6 +49,7 @@ public class PostgresDatabase extends AbstractJdbcDatabase {
         return "PostgreSQL";
     }
 
+    @Override
     public Integer getDefaultPort() {
         return 5432;
     }
@@ -67,18 +59,22 @@ public class PostgresDatabase extends AbstractJdbcDatabase {
         return systemTablesAndViews;
     }
 
+    @Override
     public int getPriority() {
         return PRIORITY_DEFAULT;
     }
 
+    @Override
     public boolean supportsInitiallyDeferrableColumns() {
         return true;
     }
 
+    @Override
     public boolean isCorrectDatabaseImplementation(DatabaseConnection conn) throws DatabaseException {
         return PRODUCT_NAME.equalsIgnoreCase(conn.getDatabaseProductName());
     }
 
+    @Override
     public String getDefaultDriver(String url) {
         if (url.startsWith("jdbc:postgresql:")) {
             return "org.postgresql.Driver";
@@ -140,6 +136,7 @@ public class PostgresDatabase extends AbstractJdbcDatabase {
         return super.isSystemObject(example);
     }
 
+    @Override
     public boolean supportsTablespaces() {
         return true;
     }
@@ -191,7 +188,7 @@ public class PostgresDatabase extends AbstractJdbcDatabase {
         if (tableName == null) {
             return false;
         }
-        return tableName.matches(".*[A-Z].*") && tableName.matches(".*[a-z].*");
+        return StringUtils.hasUpperCase(tableName) && StringUtils.hasLowerCase(tableName);
     }
 
     @Override

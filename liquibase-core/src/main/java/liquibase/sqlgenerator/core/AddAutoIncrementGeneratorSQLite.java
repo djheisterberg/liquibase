@@ -1,6 +1,7 @@
 package liquibase.sqlgenerator.core;
 
 import liquibase.change.ColumnConfig;
+import liquibase.change.ConstraintsConfig;
 import liquibase.database.Database;
 import liquibase.database.core.SQLiteDatabase;
 import liquibase.exception.LiquibaseException;
@@ -60,22 +61,27 @@ public class AddAutoIncrementGeneratorSQLite extends AddAutoIncrementGenerator {
 
         // define alter table logic
         SQLiteDatabase.AlterTableVisitor rename_alter_visitor = new SQLiteDatabase.AlterTableVisitor() {
+            @Override
             public ColumnConfig[] getColumnsToAdd() {
                 return new ColumnConfig[0];
             }
 
+            @Override
             public boolean copyThisColumn(ColumnConfig column) {
                 return true;
             }
 
+            @Override
             public boolean createThisColumn(ColumnConfig column) {
                 if (column.getName().equals(statement.getColumnName())) {
                     column.setAutoIncrement(true);
+                    column.setConstraints(new ConstraintsConfig().setPrimaryKey(true));
                     column.setType("INTEGER");
                 }
                 return true;
             }
 
+            @Override
             public boolean createThisIndex(Index index) {
                 return true;
             }
@@ -83,9 +89,8 @@ public class AddAutoIncrementGeneratorSQLite extends AddAutoIncrementGenerator {
 
         try {
             // alter table
-            for (SqlStatement generatedStatement : SQLiteDatabase.getAlterTableStatements(rename_alter_visitor,database, statement.getCatalogName(), statement.getSchemaName(), statement.getTableName())) {
-                    statements.addAll(Arrays.asList(SqlGeneratorFactory.getInstance().generateSql(generatedStatement, database)));
-            }
+            List<SqlStatement> alterTableStatements = SQLiteDatabase.getAlterTableStatements(rename_alter_visitor, database, statement.getCatalogName(), statement.getSchemaName(), statement.getTableName());
+            statements.addAll(Arrays.asList(SqlGeneratorFactory.getInstance().generateSql(alterTableStatements.toArray(new SqlStatement[alterTableStatements.size()]), database)));
         } catch (DatabaseException e) {
             e.printStackTrace();
         }

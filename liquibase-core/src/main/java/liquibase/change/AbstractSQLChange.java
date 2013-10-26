@@ -2,11 +2,13 @@ package liquibase.change;
 
 import liquibase.database.Database;
 import liquibase.database.core.MSSQLDatabase;
-import liquibase.exception.DatabaseException;
+import liquibase.exception.*;
+import liquibase.logging.LogFactory;
 import liquibase.statement.SqlStatement;
 import liquibase.statement.core.RawSqlStatement;
 import liquibase.util.StringUtils;
 
+import java.io.*;
 import java.util.*;
 
 /**
@@ -23,16 +25,27 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
     private String sql;
     private String dbms;
 
+    protected InputStream sqlStream;
+
+    protected String encoding = null;
+
+
     protected AbstractSQLChange() {
         setStripComments(null);
         setSplitStatements(null);
     }
 
+    public boolean initializeSqlStream() throws IOException {
+        return true;
+    }
+
+    @Override
     @DatabaseChangeProperty(since = "3.0", exampleValue = "h2, oracle")
     public String getDbms() {
         return dbms;
     }
 
+    @Override
     public void setDbms(final String dbms) {
         this.dbms = dbms;
     }
@@ -45,6 +58,21 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
     @Override
     public boolean supports(Database database) {
         return true;
+    }
+
+    @Override
+    public Warnings warn(Database database) {
+        return new Warnings();
+    }
+
+    @Override
+    public ValidationErrors validate(Database database) {
+        ValidationErrors validationErrors = new ValidationErrors();
+        if (StringUtils.trimToNull(sql) == null) {
+            validationErrors.addError("'sql' is required");
+        }
+        return validationErrors;
+
     }
 
     /**
@@ -133,14 +161,28 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
      */
     @Override
     public CheckSum generateCheckSum() {
-        String sql = getSql();
-        if (sql == null) {
+        InputStream stream = this.sqlStream;
+
+        String sql = this.sql;
+        if (sqlStream == null && sql == null) {
             sql = "";
         }
-        return CheckSum.compute(this.getEndDelimiter()+":"+
-                this.isSplitStatements()+":"+
-                this.isStripComments()+":"+
-                prepareSqlForChecksum(sql)); //normalize line endings
+
+        if (sql != null) {
+            stream = new ByteArrayInputStream(sql.getBytes());
+        }
+
+        try {
+            CheckSum checkSum = CheckSum.compute(new NormalizingStream(this.getEndDelimiter(), this.isSplitStatements(), this.isStripComments(), stream), false);
+
+            return checkSum;
+        } finally {
+            try {
+                initializeSqlStream();
+            } catch (IOException e) {
+                LogFactory.getLogger().severe("Exception re-initializing sql", e);
+            }
+        }
     }
 
 
@@ -151,11 +193,13 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
      * If stripping comments is true then any comments are removed before the splitting is executed.
      * The set SQL is passed through the {@link java.sql.Connection#nativeSQL} method if a connection is available.
      */
+    @Override
     public SqlStatement[] generateStatements(Database database) {
 
         List<SqlStatement> returnStatements = new ArrayList<SqlStatement>();
 
-        if (StringUtils.trimToNull(getSql()) == null) {
+        String sql = StringUtils.trimToNull(getSql());
+        if (sql == null) {
             return new SqlStatement[0];
         }
 
@@ -180,17 +224,20 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
         return returnStatements.toArray(new SqlStatement[returnStatements.size()]);
     }
 
-    protected String normalizeLineEndings(String string) {
-        return string.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    @Override
+    public boolean generateStatementsVolatile(Database database) {
+        return false;
     }
 
-    protected String prepareSqlForChecksum(String string) {
-        string = string.trim(); //remove begininng and trailig space
-        string = string.replace("\r\n", "\n").replace("\r", "\n"); //ensure line endings are consistent (for next replacements) across OS types
-        string = string.replaceAll("\\s*\\n\\s*", " "); //remove line endings, preserving them as a space. Collapse any whitespace around them into the same space
-        string = string.replaceAll("\\s+", " "); //collapse duplicate spaces
+    @Override
+    public boolean generateRollbackStatementsVolatile(Database database) {
+        return false;
+    }
 
-        return string;
+
+
+    protected String normalizeLineEndings(String string) {
+        return string.replace("\r", "");
     }
 
 //    @Override
@@ -207,4 +254,118 @@ public abstract class AbstractSQLChange extends AbstractChange implements DbmsTa
 //            return isSplitStatements();
 //        }
 //    }
+
+    public static class NormalizingStream extends InputStream {
+        private ByteArrayInputStream headerStream;
+        private PushbackInputStream stream;
+
+        private byte[] quickBuffer = new byte[100];
+        private List<Byte> resizingBuffer = new ArrayList<Byte>();
+
+
+        private int lastChar = 'X';
+        private boolean seenNonSpace = false;
+
+        public NormalizingStream(String endDelimiter, Boolean splitStatements, Boolean stripComments, InputStream stream) {
+            this.stream = new PushbackInputStream(stream, 2048);
+            this.headerStream = new ByteArrayInputStream((endDelimiter+":"+splitStatements+":"+stripComments+":").getBytes());
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (headerStream != null) {
+                int returnChar = headerStream.read();
+                if (returnChar != -1) {
+                    return returnChar;
+                }
+                headerStream = null;
+            }
+
+            int returnChar = stream.read();
+            if (isWhiteSpace(returnChar)) {
+                returnChar = ' ';
+            }
+
+            while (returnChar == ' ' && (!seenNonSpace || lastChar == ' ')) {
+                returnChar = stream.read();
+
+                if (isWhiteSpace(returnChar)) {
+                    returnChar = ' ';
+                }
+            }
+
+            seenNonSpace = true;
+
+            lastChar = returnChar;
+
+            if (lastChar == ' ' && isOnlyWhitespaceRemaining()) {
+                return -1;
+            }
+
+            return returnChar;
+        }
+
+        @Override
+        public int available() throws IOException {
+            return stream.available();
+        }
+
+        @Override
+        public boolean markSupported() {
+            return stream.markSupported();
+        }
+
+        @Override
+        public void mark(int readlimit) {
+            stream.mark(readlimit);
+        }
+
+        @Override
+        public void reset() throws IOException {
+            stream.reset();
+        }
+
+        private boolean isOnlyWhitespaceRemaining() throws IOException {
+            try {
+                int quickBufferUsed = 0;
+                while (true) {
+                    byte read = (byte) stream.read();
+                    if (quickBufferUsed >= quickBuffer.length) {
+                        resizingBuffer.add(read);
+                    } else {
+                        quickBuffer[quickBufferUsed++] = read;
+                    }
+
+                    if (read == -1) {
+                        return true;
+                    }
+                    if (!isWhiteSpace(read)) {
+                        if (resizingBuffer.size() > 0) {
+
+                            byte[] buf = new byte[resizingBuffer.size()];
+                            for (int i=0; i< resizingBuffer.size(); i++) {
+                                buf[i] = resizingBuffer.get(i);
+                            }
+
+                            stream.unread(buf);
+                        }
+
+                        stream.unread(quickBuffer, 0, quickBufferUsed);
+                        return false;
+                    }
+                }
+            } finally {
+                resizingBuffer.clear();
+            }
+        }
+
+        private boolean isWhiteSpace(int read) {
+            return read == ' ' || read == '\n' || read == '\r' || read == '\t';
+        }
+
+        @Override
+        public void close() throws IOException {
+            stream.close();
+        }
+    }
 }
