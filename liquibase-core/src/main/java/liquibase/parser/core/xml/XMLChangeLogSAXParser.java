@@ -11,8 +11,8 @@ import liquibase.changelog.DatabaseChangeLog;
 import liquibase.exception.ChangeLogParseException;
 import liquibase.logging.LogFactory;
 import liquibase.parser.ChangeLogParser;
+import liquibase.resource.UtfBomStripperInputStream;
 import liquibase.resource.ResourceAccessor;
-import liquibase.resource.UtfBomAwareReader;
 import liquibase.util.file.FilenameUtils;
 
 import org.xml.sax.ErrorHandler;
@@ -46,10 +46,6 @@ public class XMLChangeLogSAXParser implements ChangeLogParser {
 
     public static String getSchemaVersion() {
         return "3.0";
-    }
-
-    public static String getDatabaseChangeLogNameSpace() {
-        return "http://www.liquibase.org/xml/ns/dbchangelog";
     }
 
     @Override
@@ -102,7 +98,7 @@ public class XMLChangeLogSAXParser implements ChangeLogParser {
 
             XMLChangeLogSAXHandler contentHandler = new XMLChangeLogSAXHandler(physicalChangeLogLocation, resourceAccessor, changeLogParameters);
             xmlReader.setContentHandler(contentHandler);
-            xmlReader.parse(new InputSource(new UtfBomAwareReader(inputStream)));
+            xmlReader.parse(new InputSource(new UtfBomStripperInputStream(inputStream)));
 
             return contentHandler.getDatabaseChangeLog();
         } catch (ChangeLogParseException e) {
