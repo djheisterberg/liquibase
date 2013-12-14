@@ -18,6 +18,7 @@ import liquibase.structure.core.Sequence;
 import liquibase.structure.core.Table;
 import liquibase.util.StringUtils;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -54,6 +55,9 @@ public class CreateTableGenerator extends AbstractSqlGenerator<CreateTableStatem
         
         Iterator<String> columnIterator = statement.getColumns().iterator();
         List<String> primaryKeyColumns = new LinkedList<String>();
+
+        BigInteger mysqlTableOptionStartWith = null;
+
         while (columnIterator.hasNext()) {
             String column = columnIterator.next();
             DatabaseDataType columnType = statement.getColumnTypes().get(column).toDatabaseDataType(database);
@@ -70,7 +74,7 @@ public class CreateTableGenerator extends AbstractSqlGenerator<CreateTableStatem
                 }
             }
 
-            boolean isAutoIncrementColumn = autoIncrementConstraint != null;            
+            boolean isAutoIncrementColumn = autoIncrementConstraint != null;
             boolean isPrimaryKeyColumn = statement.getPrimaryKeyConstraint() != null
                     && statement.getPrimaryKeyConstraint().getColumns().contains(column);
             isPrimaryKeyAutoIncrement = isPrimaryKeyAutoIncrement
@@ -114,9 +118,13 @@ public class CreateTableGenerator extends AbstractSqlGenerator<CreateTableStatem
                         buffer.append(" ").append(autoIncrementClause);
                     }
 
-                    if (database instanceof PostgresDatabase && autoIncrementConstraint.getStartWith() != null) {
-                        String sequenceName = statement.getTableName()+"_"+column+"_seq";
-                        additionalSql.add(new UnparsedSql("alter sequence "+database.escapeSequenceName(statement.getCatalogName(), statement.getSchemaName(), sequenceName)+" start with "+autoIncrementConstraint.getStartWith(), new Sequence().setName(sequenceName).setSchema(statement.getCatalogName(), statement.getSchemaName())));
+                    if( autoIncrementConstraint.getStartWith() != null ){
+	                    if (database instanceof PostgresDatabase) {
+	                        String sequenceName = statement.getTableName()+"_"+column+"_seq";
+	                        additionalSql.add(new UnparsedSql("alter sequence "+database.escapeSequenceName(statement.getCatalogName(), statement.getSchemaName(), sequenceName)+" start with "+autoIncrementConstraint.getStartWith(), new Sequence().setName(sequenceName).setSchema(statement.getCatalogName(), statement.getSchemaName())));
+	                    }else if(database instanceof MySQLDatabase){
+	                    	mysqlTableOptionStartWith = autoIncrementConstraint.getStartWith();
+	                    }
                     }
                 } else {
                     LogFactory.getLogger().warning(database.getShortName()+" does not support autoincrement columns as requested for "+(database.escapeTableName(statement.getCatalogName(), statement.getSchemaName(), statement.getTableName())));
@@ -247,8 +255,19 @@ public class CreateTableGenerator extends AbstractSqlGenerator<CreateTableStatem
 //        }
 //    }
 
-        String sql = buffer.toString().replaceFirst(",\\s*$", "") + ")";
 
+        String sql = buffer.toString().replaceFirst(",\\s*$", "")+")";
+
+        if (database instanceof MySQLDatabase && mysqlTableOptionStartWith != null){
+        	LogFactory.getLogger().info("[MySQL] Using last startWith statement ("+mysqlTableOptionStartWith.toString()+") as table option.");
+        	sql += " "+((MySQLDatabase)database).getTableOptionAutoIncrementStartWithClause(mysqlTableOptionStartWith);
+        }
+
+
+        if (database instanceof MySQLDatabase && mysqlTableOptionStartWith != null){
+        	LogFactory.getInstance().getLog().info("[MySQL] Using last startWith statement ("+mysqlTableOptionStartWith.toString()+") as table option.");
+        	sql += " "+((MySQLDatabase)database).getTableOptionAutoIncrementStartWithClause(mysqlTableOptionStartWith);
+        }
 
 
 //        if (StringUtils.trimToNull(tablespace) != null && database.supportsTablespaces()) {

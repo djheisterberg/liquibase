@@ -97,6 +97,11 @@ public class MySQLDatabase extends AbstractJdbcDatabase {
     }
 
     @Override
+    protected boolean mustQuoteObjectName(String objectName, Class<? extends DatabaseObject> objectType) {
+        return super.mustQuoteObjectName(objectName, objectType) || (!objectName.contains("(") && !objectName.matches("\\w+"));
+    }
+
+    @Override
     public String getLineComment() {
         return "-- ";
     }
@@ -104,6 +109,17 @@ public class MySQLDatabase extends AbstractJdbcDatabase {
     @Override
     protected String getAutoIncrementClause() {
         return "AUTO_INCREMENT";
+    }
+
+    @Override
+    protected boolean generateAutoIncrementStartWith(final BigInteger startWith) {
+    	// startWith not supported here. StartWith has to be set as table option.
+        return false;
+    }
+
+    public String getTableOptionAutoIncrementStartWithClause(BigInteger startWith){
+    	String startWithClause = String.format(getAutoIncrementStartWithClause(), (startWith == null) ? defaultAutoIncrementStartWith : startWith);
+    	return getAutoIncrementClause() + startWithClause;
     }
 
     @Override

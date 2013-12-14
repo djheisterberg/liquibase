@@ -158,7 +158,7 @@ public class LoadDataChange extends AbstractChange implements ChangeWithColumns<
 
                     Object value = line[i];
 
-                    ColumnConfig columnConfig = getColumnConfig(i, headers[i]);
+                    ColumnConfig columnConfig = getColumnConfig(i, headers[i].trim());
                     if (columnConfig != null) {
                         columnName = columnConfig.getName();
 
@@ -312,6 +312,6 @@ public class LoadDataChange extends AbstractChange implements ChangeWithColumns<
 
     @Override
     public String getSerializedObjectNamespace() {
-        return STANDARD_OBJECTS_NAMESPACE;
+        return STANDARD_CHANGELOG_NAMESPACE;
     }
 }

@@ -4,10 +4,8 @@ import liquibase.change.*;
 import liquibase.database.Database;
 import liquibase.database.core.OracleDatabase;
 import liquibase.database.core.DB2Database;
-import liquibase.exception.SetupException;
 import liquibase.exception.UnexpectedLiquibaseException;
 import liquibase.exception.ValidationErrors;
-import liquibase.logging.LogFactory;
 import liquibase.statement.SqlStatement;
 import liquibase.statement.core.CreateProcedureStatement;
 import liquibase.util.StreamUtil;
@@ -134,12 +132,11 @@ public class CreateProcedureChange extends AbstractChange implements DbmsTargete
             return null;
         }
 
-        InputStream inputStream = StreamUtil.openStream(getPath(), isRelativeToChangelogFile(), getChangeSet(), getResourceAccessor());
-        if (inputStream == null) {
-            throw new IOException("<"+ChangeFactory.getInstance().getChangeMetaData(this).getName()+" path=" + path + "> - Could not find file");
+        try {
+            return StreamUtil.openStream(getPath(), isRelativeToChangelogFile(), getChangeSet(), getResourceAccessor());
+        } catch (IOException e) {
+            throw new IOException("<"+ChangeFactory.getInstance().getChangeMetaData(this).getName()+" path=" + path + "> -Unable to read file", e);
         }
-
-        return inputStream;
     }
 
     /**
@@ -207,6 +204,6 @@ public class CreateProcedureChange extends AbstractChange implements DbmsTargete
 
     @Override
     public String getSerializedObjectNamespace() {
-        return STANDARD_OBJECTS_NAMESPACE;
+        return STANDARD_CHANGELOG_NAMESPACE;
     }
 }
